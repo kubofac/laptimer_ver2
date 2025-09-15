@@ -110,8 +110,8 @@ let swState = SW_STATE.STOP;
 let startTime = 0;
 let lapRecords = [];
 let lapCount = 0;
-let countUpTimerId;
-let lapTimerId;
+let countUpTimerId; // requestAnimationFrameのID
+let lapTimerId;     // requestAnimationFrameのID
 let lapStartTime = 0;
 let port;
 let reader;
@@ -257,24 +257,31 @@ const setStorage = () => {
     localStorage.setItem(storageName, JSON.stringify(storage));
 };
 const clearStorage = () => { localStorage.removeItem(storageName); };
+
+// 修正：setIntervalからrequestAnimationFrameへ
 const countUp = () => {
-    countUpTimerId = setTimeout(() => {
+    countUpTimerId = requestAnimationFrame(() => {
         if (startTime === 0) startTime = Date.now();
         const now = Date.now();
-        timePrint(now - startTime); countUp(); setStorage();
-    }, 10);
+        timePrint(now - startTime);
+        countUp();
+        setStorage();
+    });
 };
+
+// 修正：setIntervalからrequestAnimationFrameへ
 const startRealtimeLap = () => {
     if (swState === SW_STATE.RUN) {
-        lapTimerId = setTimeout(() => {
+        lapTimerId = requestAnimationFrame(() => {
             const now = Date.now();
             const lapDisplay = timeToString(now - lapStartTime);
             if (elem.display1) elem.display1.textContent = lapDisplay;
             startRealtimeLap();
             localStorage.setItem('lapDisplay', lapDisplay);
-        }, 10);
+        });
     }
 };
+
 const timeToString = (time) => {
     let m = Math.floor(time / 60000); let s = Math.floor(time % 60000 / 1000); let ms = Math.floor(time % 1000); m = ('0' + m).slice(-2); s = ('0' + s).slice(-2); ms = ('00' + ms).slice(-3); return `${m}:${s}.${ms}`;
 };
@@ -307,16 +314,23 @@ const clickStartSW = () => {
         lastLapTime = Date.now();
         lapStartTime = Date.now();
         lapCount = 0;
-        countUp(); startRealtimeLap();
+        countUp();
+        startRealtimeLap();
         if (startButton) startButton.textContent = 'stop'; if (resetButton) resetButton.textContent = 'lap';
         if (!isGpsRunning) {
             startGps();
         }
     } else if (swState === SW_STATE.RUN) {
-        swState = SW_STATE.PAUSE; clearTimeout(countUpTimerId); clearTimeout(lapTimerId); clearTimeout(lapFixedDisplayTimeoutId);
+        swState = SW_STATE.PAUSE;
+        // 修正：clearTimeoutからcancelAnimationFrameへ
+        cancelAnimationFrame(countUpTimerId);
+        cancelAnimationFrame(lapTimerId);
+        clearTimeout(lapFixedDisplayTimeoutId);
         startTime = -(Date.now() - startTime); if (startButton) startButton.textContent = 'start'; if (resetButton) resetButton.textContent = 'reset'; setStorage();
     } else if (swState === SW_STATE.PAUSE) {
-        swState = SW_STATE.RUN; startTime = Date.now() + startTime; lapStartTime = Date.now(); countUp(); startRealtimeLap();
+        swState = SW_STATE.RUN; startTime = Date.now() + startTime; lapStartTime = Date.now();
+        countUp();
+        startRealtimeLap();
         if (startButton) startButton.textContent = 'stop'; if (resetButton) resetButton.textContent = 'lap';
         if (!isGpsRunning) {
             startGps();
@@ -335,12 +349,17 @@ const clickLapResetSW = () => {
         lapTimePrint(lapDuration);
         lastLapTime = now;
         lapStartTime = now;
-        clearTimeout(lapTimerId);
+        // 修正：clearTimeoutからcancelAnimationFrameへ
+        cancelAnimationFrame(lapTimerId);
         startRealtimeLap();
 
     } else if (swState === SW_STATE.PAUSE) {
         swState = SW_STATE.STOP; startTime = 0; lapRecords = []; lapCount = 0;
-        clearTimeout(countUpTimerId); clearTimeout(lapTimerId); clearTimeout(lapFixedDisplayTimeoutId); timePrint(0);
+        // 修正：clearTimeoutからcancelAnimationFrameへ
+        cancelAnimationFrame(countUpTimerId);
+        cancelAnimationFrame(lapTimerId);
+        clearTimeout(lapFixedDisplayTimeoutId);
+        timePrint(0);
         if (elem.lap) elem.lap.innerHTML = ''; if (elem.display1) elem.display1.textContent = '00:00.000';
         if (startButton) startButton.textContent = 'start'; if (resetButton) resetButton.textContent = 'reset';
         
@@ -486,7 +505,7 @@ function test2(position) {
         lapTimePrint(lapDuration, 'gps');
         
         // リアルタイムラップ表示を一時停止
-        clearTimeout(lapTimerId);
+        cancelAnimationFrame(lapTimerId);
         if (lapFixedDisplayTimeoutId) {
             clearTimeout(lapFixedDisplayTimeoutId);
         }
